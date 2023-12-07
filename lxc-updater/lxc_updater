@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+
+lxc_list=(240 
+	  241
+	  242 
+	  243 
+	  )
+
+for LXC_ID in ${lxc_list[@]}; do
+
+	# Get the name of the container to use when making the new template
+	LXC_NAME=$(pct status $LXC_ID --verbose | grep -oP '(?<=name: ).*')
+
+
+	echo "Working on $LXC_NAME, Container ID: $LXC_ID"
+	
+	# Update the container
+	echo "Running apt update"
+	pct exec $LXC_ID -- bash -c "apt update -y"
+	wait
+
+	# Upgrade all the packages in the container
+	echo "Running apt upgrade"
+    pct exec $LXC_ID -- bash -c "apt upgrade -y"
+    wait
+    echo "Container update / upgrade process complete."
+
+	# Remove packages in the container that are no longer needed
+	echo "Removing no longer required packages"
+	pct exec $LXC_ID -- bash -c "apt autoremove -y"
+
+	# Create a new template image of the container
+	pct stop $LXC_ID && \
+	pct set $LXC_ID --delete net0 && \
+	vzdump $LXC_ID --compress gzip --dumpdir /var/lib/vz/template/cache/ && \
+	pct set $LXC_ID --net0 name=eth0,bridge=vmbr0,ip=dhcp && \
+	pct start $LXC_ID && \
+	cd /var/lib/vz/template/cache/ && \
+	rm *.log && \
+	mv vzdump-lxc-$LXC_ID-* $LXC_NAME.tar.gz
+	echo ""
+	echo ""
+
+
+done
